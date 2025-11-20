@@ -68,7 +68,7 @@ INDEXING PHASE (At Startup):
 │  ├─ UserProfilingAdvisor (order: 5)                                       │
 │  ├─ ErrorPredictionAdvisor (order: 7)                                     │
 │  ├─ KnowledgeGraphAdvisor (order: 100)                                    │
-│  ├─ ResponseSummarizerAdvisor (order: 500)                                │
+│  ├─ ResponseSummarizerAdvisor (order: 500)                                  │
 │  ├─ EmotionalResponseAdvisor (order: 750)                                 │
 │  ├─ PersonalityAdvisor (order: 800)                                       │
 │  ├─ CognitiveBiasAdvisor (order: 850)                                     │

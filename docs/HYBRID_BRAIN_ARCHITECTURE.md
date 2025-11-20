@@ -319,3 +319,25 @@ With the **Tool RAG + Brain RAG + Hybrid Brain** architecture:
   - `PersonalityAdvisor` keeps the interaction style consistent and human‑friendly.
 
 **Net result:** the system becomes **faster, cheaper, more scalable, and easier to extend**, while keeping responses focused, high‑quality, and tailored to each query.
+
+## Part 8 – Future Upgrade: GraphRAG / CodeGraphService
+
+In addition to vector-based RAG (Tool RAG and Brain RAG), a future upgrade is to add a **graph-based view of your codebase**. This captures not just *similarity* but also *structure*:
+
+- **Nodes:** Classes, Methods, Interfaces, Database Tables.
+- **Edges:** `EXTENDS`, `IMPLEMENTS`, `CALLS`, `RETURNS`, `DEPENDS_ON`.
+
+### 8.1 `CodeGraphService`
+
+- New service responsible for building and querying a **code graph** from your existing indexes / source analysis.
+- Can be implemented initially with an in-memory graph library (e.g. JGraphT) and later migrated to a graph database (e.g. Neo4j) if needed.
+
+### 8.2 Integration with `DynamicContextAdvisor`
+
+- **Old way:** User asks "Fix `OrderService`" → vector stores return chunks mentioning `OrderService`.
+- **New way:** `DynamicContextAdvisor` also calls `CodeGraphService` to:
+  - Find the `OrderService` node.
+  - Traverse to **callers** (who uses it) and **dependencies** (repositories, entities, other services).
+  - Inject this **impact radius** into the LLM context.
+
+Result: when planning a change, the LLM sees **all affected pieces** (callers, repositories, downstream services), reducing regression risk and making the assistant behave more like a human engineer who understands the structure of the system, not just isolated files.

@@ -126,28 +126,64 @@ public class ChatService {
             // The Conductor (Brain 0) will approve/reject them
             // The ToolCallAdvisor (Brain 2) will ENFORCE only approved tools are executed
             // 💾 IMPORTANT: Pass conversation ID to MessageChatMemoryAdvisor
-            logger.info("[{}]    🚀 Calling ChatClient with message: {}", traceId, request.getMessage());
-            String response = chatClient.prompt()
-                    .system(systemPrompt)  // ← Tell AI to use conversation history
-                    .user(request.getMessage())
-                    .toolNames(suggestedToolsArray)  // ← Pass ALL suggested tools to LLM
-                    .advisors(advisor -> advisor
-                            .param("conversationId", finalConversationId)  // ← KEY: Stable conversation ID for memory advisor
-                    )
-                    .call()
-                    .content();
+            int maxIterations = 2;
+            String response = "";
+            AgentPlan finalPlan = null;
 
-            if (response == null) {
-                logger.warn("[{}]    ⚠️ ChatClient returned null response, using empty string", traceId);
-                response = "";
+            for (int iteration = 1; iteration <= maxIterations; iteration++) {
+                logger.info("[{}]    🚀 Calling ChatClient (iteration {} of {}) with message: {}", traceId, iteration, maxIterations, request.getMessage());
+
+                String userMessage = request.getMessage();
+                if (iteration > 1) {
+                    userMessage = "Please refine and improve your previous answer for the same question, using the full conversation history. Original question: " + request.getMessage();
+                }
+
+                int currentIteration = iteration;
+                GlobalBrainContext.put("iteration", currentIteration);
+
+                String iterationResponse = chatClient.prompt()
+                        .system(systemPrompt)
+                        .user(userMessage)
+                        .toolNames(suggestedToolsArray)
+                        .advisors(advisor -> advisor
+                                .param("conversationId", finalConversationId)
+                                .param("iteration",  currentIteration)
+                        )
+                        .call()
+                        .content();
+
+                if (iterationResponse == null) {
+                    logger.warn("[{}]    ⚠️ ChatClient returned null response in iteration {}, using empty string", traceId, iteration);
+                    iterationResponse = "";
+                }
+
+                AgentPlan plan = AgentPlanHolder.getPlan();
+
+                response = iterationResponse;
+                finalPlan = plan;
+
+                if (plan == null) {
+                    logger.info("[{}]    ℹ️ No AgentPlan found after iteration {}, stopping ReAct loop", traceId, iteration);
+                    break;
+                }
+
+                boolean hasTools = plan.getRequiredTools() != null && !plan.getRequiredTools().isEmpty();
+                boolean shouldContinue = hasTools && plan.getComplexity() >= 2 && iteration < maxIterations;
+
+                if (!shouldContinue) {
+                    break;
+                }
+
+                logger.info("[{}]    🔁 ReAct loop: tool-heavy or complex query detected (complexity: {}, tools: {}), continuing to next iteration", 
+                        traceId, plan.getComplexity(), plan.getRequiredTools().size());
             }
 
             logger.info("[{}]    ✅ ChatClient returned response (length: {})", traceId, response.length());
 
             // ✅ STEP 4: Get the actually USED tools from the plan
-            AgentPlan plan = AgentPlanHolder.getPlan();
-            String[] actuallyUsedTools = (plan != null && plan.getRequiredTools() != null)
-                    ? plan.getRequiredTools().toArray(new String[0])
+            AgentPlan planForTools = (finalPlan != null) ? finalPlan : AgentPlanHolder.getPlan();
+            String[] actuallyUsedTools = (planForTools != null && planForTools.getRequiredTools() != null)
+                    ? planForTools.getRequiredTools().toArray(new String[0])
                     : new String[0];
 
             logger.info("[{}] ✅ Response generated successfully (elapsed: {})",
